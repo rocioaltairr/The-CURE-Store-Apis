@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login Page</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        form {
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            width: 300px;
+            text-align: center;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+
+        input {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 16px;
+            box-sizing: border-box;
+        }
+
+        button {
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            padding: 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+
+<form id="loginForm">
+    <h2>Login</h2>
+    <label for="actor">Actor:</label>
+    <input type="actor" id="actor" name="actor" required>
+
+    <label for="username">Username:</label>
+    <input type="text" id="username" name="username" required>
+
+    <label for="password">Password:</label>
+    <input type="password" id="password" name="password" required>
+
+    <button type="button" onclick="attemptLogin()">Login</button>
+    <div style="height: 20px;"></div>
+    <button type="button" onclick="goCreateAccountPage()">Sign up</button>
+</form>
+
+<script>
+    const AccountManager = (() => {
+        let instance;
+
+        function createInstance() {
+            let accountData;
+
+            return {
+                getAccountData: () => accountData,
+                setAccountData: (data) => { accountData = data; },
+                clearAccountData: () => { accountData = null; },
+            };
+        }
+
+        return {
+            getInstance: () => {
+                if (!instance) {
+                    instance = createInstance();
+                }
+                return instance;
+            },
+        };
+    })();
+
+    function goCreateAccountPage() {
+        window.location.href = 'create_account.html'; 
+    }
+
+    async function attemptLogin() {
+        var actor = document.getElementById('actor').value;
+        var username = document.getElementById('username').value;
+        var password = document.getElementById('password').value;
+
+        try {
+            const response = await fetch(`http://127.0.0.1:5000/accountname/${username}`);
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+
+            const userData = await response.json();
+            console.log('Fetched User Data:', userData.login_attempts);
+
+            if (userData) {
+                if (userData.login_attempts <= 3) {
+                    const accountManager = AccountManager.getInstance();
+                    accountManager.setAccountData(userData);
+                    alert('Login successful!');
+                    
+                    sessionStorage.setItem("user_id", userData.id);
+                    sessionStorage.setItem("actor", actor);
+                    sessionStorage.setItem("user_name", username);
+                        
+                    if (userData) {
+                        await fetch(`http://127.0.0.1:5000/account/${userData.id}`, {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                login_attempts: 0
+                            })
+                        });
+                    }
+                    
+                    if (actor == "User") {
+                        window.location.href = 'main.html'; 
+                    } else if (actor == "Admin") {
+                        await create_accesstoken();
+                        window.location.href = 'admin_main.html'; 
+                    }
+                } else {
+                    alert('Your account is locked. Please contact support.');
+                }
+            } else {
+                alert('Invalid credentials. Please try again.');
+                // When login failed update user's login attempts, the maximun login attempts will be 3 times
+                if (userData) {
+                    await fetch(`http://127.0.0.1:5000/account/${userData.id}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            login_attempts: userData.login_attempts + 1
+                        })
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching data:', error);
+        }
+    }
+
+    async function create_accesstoken() {
+        var username = document.getElementById('username').value;
+        var password = document.getElementById('password').value;
+
+        try {
+            const response = await fetch('http://127.0.0.1:5000/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    user_name: username,
+                    code: password,
+                })
+            });
+
+            // Parse response JSON
+            const responseData = await response.json();
+
+            // Check if access token is present in response
+            if (responseData) {
+                // Login successful, store access token in session storage
+                sessionStorage.setItem("access_token", responseData['access_token']);
+
+            } else {
+                // Login failed
+                alert('Invalid credentials. Please try again.');
+            }
+        } catch (error) {
+            console.error('Error fetching data:', error);
+        }
+    }
+    
+</script>
+
+</body>
+</html>

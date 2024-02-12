@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Main Page</title>
+</head>
+<body>
+
+<h1>Shopping cart</h1>
+<button onclick="goToCart()"> Stock </button>
+<div id="accountInfo">
+</div>
+
+<div id="store-container"></div>
+<button id="logoutButton" onclick="logOut()"> Log Out</button>
+<button id="deleteButton" onclick="deleteAccount()">Delete Account</button>
+<style>
+    .store-container {
+        border: 1px solid #ccc;
+        margin-bottom: 20px;
+        padding: 10px;
+    }
+
+    .quantity-input {
+        margin-top: 5px;
+    }
+</style>
+<script>
+    let name = sessionStorage.getItem("user_name");
+    let actor = sessionStorage.getItem("actor");
+    accountInfo.innerHTML = `Welcome, ${name} you are ${actor} `;
+    fetchData();
+    
+    function fetchData() {
+        const storeContainer = document.getElementById('store-container');
+
+        storeContainer.innerHTML = '';
+
+        fetch('http://127.0.0.1:5000/store')
+        .then(response => response.json())
+        .then(data => {
+            data.forEach(store => {
+                const storeDiv = document.createElement('div');
+                storeDiv.classList.add('store-container');
+                storeDiv.innerHTML = `<h2>${store.name}</h2>`;
+
+                if (store.saleitems.length > 0) {
+                    const itemList = document.createElement('ul');
+
+                    store.saleitems.forEach(item => {
+                        const listItem = document.createElement('div');
+                        const itemName = document.createElement('strong');
+                        itemName.textContent = item.name;
+                        const itemPrice = document.createTextNode(` - Price: $${item.price}`);
+                        const itemStock = document.createTextNode(` - Stock: ${item.stock}`);
+                        listItem.appendChild(itemName);
+                        listItem.appendChild(itemPrice);
+                        listItem.appendChild(itemStock);
+
+                        const quantityInput = document.createElement('input');
+                        quantityInput.setAttribute('type', 'number');
+                        quantityInput.setAttribute('min', '0');
+                        quantityInput.setAttribute('value', '0');
+                        quantityInput.classList.add('quantity-input');
+                        listItem.appendChild(quantityInput);
+
+                        itemList.appendChild(listItem);
+
+                        const addButton = document.createElement('button');
+                        addButton.textContent = "Add to cart";
+                        addButton.onclick = function() {
+                            if (quantityInput.value != 0) {
+                                AddToStock(item.name, item.price, quantityInput.value, store.id, item.id, item.stock);
+                            }
+                        };
+                        itemList.appendChild(addButton);
+                    });
+
+                    storeDiv.appendChild(itemList);
+                } else {
+                    const noItemsMessage = document.createElement('p');
+                    noItemsMessage.textContent = 'No sale items available for this store.';
+                    storeDiv.appendChild(noItemsMessage);
+                }
+
+                storeContainer.appendChild(storeDiv);
+            });
+        })
+        .catch(error => console.error('Error fetching data:', error));
+    }
+
+    function logOut() {
+        sessionStorage.removeItem("access_token");
+        sessionStorage.removeItem("user_name");
+        sessionStorage.removeItem("actor");
+        window.location.href = 'login.html'; 
+    }
+
+    function goToCart() {
+        window.location.href = 'cart.html'; 
+    }
+
+    function deleteAccount() {
+        let id = sessionStorage.getItem("user_id");
+        fetch(`http://127.0.0.1:5000/account/${id}`, {
+            method: 'DELETE', 
+            headers: {
+                'Content-Type': 'application/json'
+            },
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to delete account');
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log('Account Deleted:', data);
+            window.location.href = 'login.html'; 
+        })
+        .catch(error => console.error('Error delete account:', error));
+    }
+
+    async function AddToStock(name, price, stock, storeId, itemId, currentStock) {
+        let userId = sessionStorage.getItem("user_id");
+        let access_token = sessionStorage.getItem("access_token");
+        
+        const url = 'http://127.0.0.1:5000/item';
+        const body = {
+            name: name,
+            price: price,
+            stock: stock,
+            account_id: userId
+        };
+
+        fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(body)
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log('Success:', data);
+        })
+        .catch(error => {
+            console.error('Error:', error);
+        });
+        const updateData = {
+            name: name,
+            price: price,
+            stock: currentStock - stock
+        };
+        await updateSaleItem(storeId, itemId, updateData);
+        fetchData();
+    }
+
+    async function updateSaleItem(storeId, itemId, updateData) {
+        try {
+            const response = await fetch(`http://127.0.0.1:5000/saleitem/${storeId}/${itemId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(updateData)
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to update sale item');
+            }
+
+            return await response.json();
+        } catch (error) {
+            console.error('Error updating sale item:', error);
+            throw error;
+        }
+    }
+</script>
+</body>
+</html>

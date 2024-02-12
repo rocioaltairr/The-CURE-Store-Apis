@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Main Page</title>
+</head>
+<body>
+
+<h1>Manage Store</h1>
+
+<div id="accountInfo">
+</div>
+
+<div id="store-container"></div>
+<button id="addButton" onclick="showAddForm()"> Add Store</button>
+<button id="logoutButton" onclick="logOut()"> Log Out</button>
+<button id="deleteButton" onclick="deleteAccount()">Delete Account</button>
+<style>
+    .store-container {
+        border: 1px solid #ccc;
+        margin-bottom: 20px;
+        padding: 10px;
+    }
+
+    .quantity-input {
+        margin-top: 5px;
+    }
+
+    #addForm {
+        display: none;
+        margin-top: 20px;
+    }
+
+    .addItemButton {
+        margin-top: 10px;
+    }
+
+    .addItemForm {
+        display: none;
+        margin-top: 10px;
+    }
+</style>
+
+<script>
+    let name = sessionStorage.getItem("user_name");
+    let actor = sessionStorage.getItem("actor");
+    accountInfo.innerHTML = `Welcome, ${name} you are ${actor} `;
+
+    function showAddForm() {
+        const addForm = document.getElementById('addForm');
+        addForm.style.display = 'block';
+    }
+
+    function showAddItemForm(storeId) {
+        const addItemForm = document.getElementById(`addItemForm-${storeId}`);
+        addItemForm.style.display = 'block';
+    }
+
+    function deleteAccount() {
+        let id = sessionStorage.getItem("user_id");
+        fetch(`http://127.0.0.1:5000/account/${id}`, {
+            method: 'DELETE', 
+            headers: {
+                'Content-Type': 'application/json'
+            },
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to delete account');
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log('Account Deleted:', data);
+            fetchStoreData();
+            window.location.href = 'login.html'; 
+        })
+        .catch(error => console.error('Error delete account:', error));
+    }
+
+    function handleSubmit(event) {
+        event.preventDefault();
+        const formData = new FormData(event.target);
+
+        let access_token = sessionStorage.getItem("access_token");
+
+        fetch('http://127.0.0.1:5000/store', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + access_token
+            },
+            body: JSON.stringify({
+                name: formData.get('name')
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('New store created:', data);
+            fetchStoreData();
+        })
+        .catch(error => console.error('Error creating store:', error));
+    }
+
+    function handleItemSubmit(event, storeId) {
+        print("YO")
+        event.preventDefault();
+        const formData = new FormData(event.target);
+        // let access_token = sessionStorage.getItem("access_token");
+        fetch('http://127.0.0.1:5000/saleitem', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                store_id: storeId,
+                name: formData.get('name'),
+                price: parseFloat(formData.get('price')),
+                stock: formData.get('stock')
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('New item added:', data);
+            fetchStoreData();
+        })
+        .catch(error => console.error('Error adding item:', error));
+    }
+
+    function fetchStoreData() {
+        fetch('http://127.0.0.1:5000/store')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('store-container').innerHTML = '';
+
+            data.forEach(store => {
+                const storeDiv = document.createElement('div');
+                storeDiv.classList.add('store-container');
+                storeDiv.innerHTML = `<h2>${store.name}</h2>`;
+
+                const addItemButton = document.createElement('button');
+                addItemButton.textContent = 'Add Item';
+                addItemButton.classList.add('addItemButton');
+                addItemButton.onclick = () => showAddItemForm(store.id);
+                storeDiv.appendChild(addItemButton);
+
+                const addItemForm = document.createElement('div');
+                addItemForm.classList.add('addItemForm');
+                addItemForm.id = `addItemForm-${store.id}`;
+                addItemForm.innerHTML = `
+                    <form onsubmit="handleItemSubmit(event, ${store.id})">
+                        <label for="name-${store.id}">Item Name:</label>
+                        <input type="text" id="name-${store.id}" name="name" required>
+                        <label for="price-${store.id}">Item Price:</label>
+                        <input type="number" id="price-${store.id}" name="price" required>
+                        <label for="stock-${store.id}">Item Stock:</label>
+                        <input type="number" id="stock-${store.id}" name="stock" required>
+                        <button type="submit">Add</button>
+                    </form>
+                `;
+                storeDiv.appendChild(addItemForm);
+
+                if (store.saleitems.length > 0) {
+                    const itemList = document.createElement('ul');
+
+                    store.saleitems.forEach(item => {
+                        const listItem = document.createElement('div');
+                        const itemName = document.createElement('strong');
+                        itemName.textContent = item.name;
+                        const itemPrice = document.createTextNode(` - Price: $${item.price}`);
+                        listItem.appendChild(itemName);
+                        listItem.appendChild(itemPrice);
+
+                        const quantityInput = document.createElement('input');
+                        quantityInput.setAttribute('type', 'number');
+                        quantityInput.setAttribute('min', '0');
+                        quantityInput.setAttribute('value', item.stock);
+                        quantityInput.classList.add('quantity-input');
+                        listItem.appendChild(quantityInput);
+
+                        itemList.appendChild(listItem);
+                    });
+
+                    storeDiv.appendChild(itemList);
+                } else {
+                    const noItemsMessage = document.createElement('p');
+                    noItemsMessage.textContent = 'No sale items available for this store.';
+                    storeDiv.appendChild(noItemsMessage);
+                }
+                document.getElementById('store-container').appendChild(storeDiv);
+            });
+        })
+        .catch(error => console.error('Error fetching data:', error));
+    }
+
+    fetchStoreData();
+
+    function logOut() {
+        window.location.href = 'login.html'; 
+    }
+</script>
+
+<div id="addForm">
+    <form id="storeForm" onsubmit="handleSubmit(event)">
+        <label for="name">Store Name:</label>
+        <input type="text" id="name" name="name" required>
+        <button type="submit">Add</button>
+        <button type="button" onclick="document.getElementById('addForm').style.display = 'none';">Cancel</button>
+    </form>
+</div>
+
+</body>
+</html>
